@@ -1,0 +1,101 @@
+// ---------- CONFIGURATION SECTION ---------- //
+const CLASS_HOUR = 23;     // Class starts at 8:00 AM
+const CLASS_MINUTE = 0;
+const LATE_BUFFER_MINUTES = 20;
+const MASTER_SHEET = "Students";
+const ATTENDANCE_SHEET = "Attendance";
+const AZURE_ENDPOINT = "https://prod-01.canadacentral.logic.azure.com:443/workflows/30ecef0e198542f29076f68e15e6f80c/triggers/When_a_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FWhen_a_HTTP_request_is_received%2Frun&sv=1.0&sig=s3Wlu4YFvR66X8JDLN__osvvDyiiflLBhr3OP7v4nyQ"; // Replace with your Logic App URL
+
+// ---------- MAIN FUNCTION TO HANDLE SCANS ---------- //
+function doPost(e) {
+  SpreadsheetApp.getActiveSpreadsheet().setSpreadsheetTimeZone("America/Toronto");
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(ATTENDANCE_SHEET);
+  const studentSheet = ss.getSheetByName(MASTER_SHEET);
+
+  if (!e || !e.postData) {
+    sheet.appendRow([new Date(), "❌ No POST data", "", ""]);
+    return ContentService.createTextOutput("No POST data").setMimeType(ContentService.MimeType.TEXT);
+  }
+
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const uid = data.uid || "unknown";
+    const timeStr = data.time || new Date().toISOString();
+    const scanTime = new Date(timeStr);
+
+    // Get student name from UID
+    const name = getStudentName(uid);
+
+    // Calculate class start and late time
+    const classStart = new Date(scanTime);
+    classStart.setHours(CLASS_HOUR, CLASS_MINUTE, 0, 0);
+
+    const lateCutoff = new Date(classStart.getTime() + LATE_BUFFER_MINUTES * 60000);
+
+    // Determine status
+    let status = "On Time";
+    if (scanTime > lateCutoff) {
+      status = "Late";
+    }
+
+    // Log to sheet
+    sheet.appendRow([scanTime, uid, name, status]);
+    return ContentService.createTextOutput("✅ Logged").setMimeType(ContentService.MimeType.TEXT);
+  } catch (err) {
+    sheet.appendRow([new Date(), "❌ Error", err.toString(), ""]);
+    return ContentService.createTextOutput("Error: " + err.toString()).setMimeType(ContentService.MimeType.TEXT);
+  }
+}
+
+// ---------- GET STUDENT NAME BY UID ---------- //
+function getStudentName(uid) {
+  const studentSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MASTER_SHEET);
+  const data = studentSheet.getDataRange().getValues();
+  for (let i = 0; i < data.length; i++) {
+    if (data[i][0] == uid) return data[i][1];
+  }
+  return "Unknown Student";
+}
+
+// ---------- CLEAR ATTENDANCE SHEET DAILY ---------- //
+function resetAttendanceSheet() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ATTENDANCE_SHEET);
+  sheet.clearContents();
+  sheet.appendRow(["Timestamp", "UID", "Name", "Status"]);
+}
+
+// ---------- SEND SHEET TO AZURE LOGIC APP ---------- //
+function sendToAzure() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ATTENDANCE_SHEET);
+  const data = sheet.getDataRange().getValues();
+  const csv = data.map(row => row.join(",")).join("\n");
+ Logger.log(csv);  
+  const options = {
+    method: 'post',
+    contentType: 'text/csv',
+    payload: csv
+  };
+
+  UrlFetchApp.fetch(AZURE_ENDPOINT, options);
+}
+
+// ---------- BROWSER TESTER ---------- //
+function testDoPostManually() {
+  const mockData = {
+    postData: {
+      contents: JSON.stringify({
+        uid: "TEST123",
+        time: new Date().toISOString()
+      })
+    }
+  };
+
+  const response = doPost(mockData);
+  Logger.log(response.getContent());
+}
+
+// ---------- OPTIONAL GET FOR DEBUGGING ---------- //
+function doGet() {
+  return ContentService.createTextOutput("✅ Web App is Live").setMimeType(ContentService.MimeType.TEXT);
+}
