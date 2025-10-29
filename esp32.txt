@@ -5,11 +5,11 @@
 #include <time.h>
 
 // WiFi credentials
-const char* ssid = "Home414";
-const char* password = "Home1234";
+const char* ssid = " ";
+const char* password = " ";
 
 // Google Apps Script Web App URL
-const String serverName = "https://script.google.com/macros/s/AKfycbzOPuvteOk871eiDg04xxHMxRWy2ZAaULVHR7qJGsfPNN-zjJDOQ_Fisver6RXLsOg/exec";
+const String serverName = " ";
 
 // RFID pins
 #define SS_PIN 5      // D5
@@ -104,3 +104,4 @@ void loop() {
   rfid.PCD_StopCrypto1();
   delay(1000);  // avoid double-scan
 }
+
